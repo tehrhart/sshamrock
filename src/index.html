@@ -85,5 +85,20 @@
     </div>
 
     <div id="terminal" style="display: none;"></div>
+
+    <!-- Passphrase dialog — uses type=password for masking + password manager -->
+    <dialog id="passphrase-dialog">
+      <form method="dialog" id="passphrase-form">
+        <h2 id="passphrase-title">Key passphrase</h2>
+        <p id="passphrase-message"></p>
+        <input type="password" id="passphrase-input"
+               autocomplete="current-password" required
+               placeholder="Enter passphrase" />
+        <div class="dialog-actions">
+          <button type="button" id="passphrase-cancel" class="btn-secondary">Cancel</button>
+          <button type="submit" class="btn-primary">OK</button>
+        </div>
+      </form>
+    </dialog>
   </body>
 </html>

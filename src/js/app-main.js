@@ -99,13 +99,49 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // --- Passphrase dialog (masked input, browser password manager) ---
+  const passphraseDialog = document.getElementById('passphrase-dialog');
+  const passphraseForm = document.getElementById('passphrase-form');
+  const passphraseInput = document.getElementById('passphrase-input');
+  const passphraseTitle = document.getElementById('passphrase-title');
+  const passphraseMessage = document.getElementById('passphrase-message');
+  const passphraseCancel = document.getElementById('passphrase-cancel');
+
+  function askPassphrase(title, message) {
+    return new Promise((resolve) => {
+      passphraseTitle.textContent = title;
+      passphraseMessage.textContent = message;
+      passphraseInput.value = '';
+      passphraseDialog.showModal();
+      passphraseInput.focus();
+
+      function onSubmit(e) {
+        e.preventDefault();
+        cleanup();
+        passphraseDialog.close();
+        resolve(passphraseInput.value);
+      }
+      function onCancel() {
+        cleanup();
+        passphraseDialog.close();
+        resolve(null);
+      }
+      function cleanup() {
+        passphraseForm.removeEventListener('submit', onSubmit);
+        passphraseCancel.removeEventListener('click', onCancel);
+      }
+      passphraseForm.addEventListener('submit', onSubmit);
+      passphraseCancel.addEventListener('click', onCancel);
+    });
+  }
+
   // --- SSH key management (encrypted at rest) ---
   importKeyInput.addEventListener('change', async () => {
     if (!importKeyInput.files.length) return;
 
-    const passphrase = prompt(
-        'Enter a passphrase to encrypt the stored key.\n' +
-        'You will need this passphrase each time you connect.');
+    const passphrase = await askPassphrase(
+        'Encrypt SSH key',
+        'Choose a passphrase to protect this key. You\'ll need it each time you connect.');
     if (passphrase === null) {
       importKeyInput.value = '';
       return;
@@ -171,7 +207,9 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
 
     // If a key is selected, decrypt it and inject into the nassh filesystem.
     if (identity) {
-      const passphrase = prompt(`Enter passphrase for key "${identity}":`);
+      const passphrase = await askPassphrase(
+          'Unlock SSH key',
+          `Enter passphrase for "${identity}"`);
       if (passphrase === null) return;
       let keyData;
       try {
