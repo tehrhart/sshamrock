@@ -11,10 +11,10 @@ import {CommandInstance} from '../nassh/js/nassh_command_instance.js';
 import {
   PreferenceManager, LocalPreferenceManager,
 } from '../nassh/js/nassh_preference_manager.js';
+import {getIndexeddbFileSystem} from '../nassh/js/nassh_fs.js';
 import {
-  getIndexeddbFileSystem, importIdentityFiles, getIdentityFileNames,
-  deleteIdentityFiles,
-} from '../nassh/js/nassh_fs.js';
+  encryptAndStore, decryptKey, listStoredKeys, deleteStoredKey,
+} from './key-store.js';
 import {relayOptionsString} from './config.js';
 
 const storage = getSyncStorage();
@@ -42,7 +42,7 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
   const deleteKeyBtn = document.getElementById('delete-key');
 
   populateProfiles(prefs, profileSelect);
-  await refreshKeyList();
+  refreshKeyList();
 
   // --- URL parameter pre-population ---
   // Supports: ?user=root&host=server.example.com&port=22&mode=sftp
@@ -51,6 +51,10 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
   if (params.get('host')) hostnameInput.value = params.get('host');
   if (params.get('port')) portInput.value = params.get('port');
   if (params.get('mode')) appSelect.value = params.get('mode');
+  // Strip params from address bar and history after reading.
+  if (location.search) {
+    history.replaceState({}, '', location.pathname + location.hash);
+  }
 
   // --- Profile selection ---
   profileSelect.addEventListener('change', () => {
@@ -95,36 +99,52 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // --- SSH key management ---
+  // --- SSH key management (encrypted at rest) ---
   importKeyInput.addEventListener('change', async () => {
     if (!importKeyInput.files.length) return;
-    const fs = await getIndexeddbFileSystem();
-    const newNames = Array.from(importKeyInput.files)
-        .map((f) => f.name)
-        .filter((n) => !n.endsWith('.pub') || n.endsWith('-cert.pub'));
-    await importIdentityFiles(fs, importKeyInput.files);
+
+    const passphrase = prompt(
+        'Enter a passphrase to encrypt the stored key.\n' +
+        'You will need this passphrase each time you connect.');
+    if (passphrase === null) {
+      importKeyInput.value = '';
+      return;
+    }
+    if (passphrase.length < 4) {
+      alert('Passphrase must be at least 4 characters.');
+      importKeyInput.value = '';
+      return;
+    }
+
+    const imported = [];
+    for (const file of importKeyInput.files) {
+      if (file.name.endsWith('.pub') && !file.name.endsWith('-cert.pub')) {
+        continue;
+      }
+      const data = await file.arrayBuffer();
+      await encryptAndStore(file.name, data, passphrase);
+      imported.push(file.name);
+    }
+
     importKeyInput.value = '';
-    await refreshKeyList();
-    // Auto-select the first imported key.
-    if (newNames.length && !identitySelect.value) {
-      identitySelect.value = newNames[0];
+    refreshKeyList();
+    if (imported.length) {
+      identitySelect.value = imported[0];
     }
   });
 
-  deleteKeyBtn.addEventListener('click', async () => {
+  deleteKeyBtn.addEventListener('click', () => {
     const name = identitySelect.value;
     if (!name) return;
     if (!confirm(`Delete key "${name}"?`)) return;
-    const fs = await getIndexeddbFileSystem();
-    await deleteIdentityFiles(fs, name);
-    await refreshKeyList();
+    deleteStoredKey(name);
+    refreshKeyList();
   });
 
-  async function refreshKeyList(selectName) {
-    const fs = await getIndexeddbFileSystem();
-    const names = await getIdentityFileNames(fs);
-    const current = selectName || identitySelect.value;
-    identitySelect.innerHTML = '<option value="">None (use password)</option>';
+  function refreshKeyList() {
+    const names = listStoredKeys();
+    const current = identitySelect.value;
+    identitySelect.innerHTML = '<option value="">Password authentication</option>';
     for (const name of names) {
       const opt = document.createElement('option');
       opt.value = name;
@@ -147,6 +167,23 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     if (!username || !hostname) {
       alert('Username and hostname are required.');
       return;
+    }
+
+    // If a key is selected, decrypt it and inject into the nassh filesystem.
+    if (identity) {
+      const passphrase = prompt(`Enter passphrase for key "${identity}":`);
+      if (passphrase === null) return;
+      let keyData;
+      try {
+        keyData = await decryptKey(identity, passphrase);
+      } catch {
+        alert('Wrong passphrase or corrupted key.');
+        return;
+      }
+      const fs = await getIndexeddbFileSystem();
+      await fs.createDirectory('/.ssh');
+      await fs.createDirectory('/.ssh/identity');
+      await fs.writeFile(`/.ssh/identity/${identity}`, keyData.buffer);
     }
 
     // Save or update profile.
@@ -175,7 +212,7 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     formWrapper.style.display = 'none';
     terminalEl.style.display = 'block';
 
-    startTerminal(terminalEl, profileId, storage, formWrapper);
+    startTerminal(terminalEl, profileId, identity, storage, formWrapper);
   });
 
   // If URL hash has a profile-id, connect directly.
@@ -186,14 +223,14 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
       prefs.getProfile(profileId);
       formWrapper.style.display = 'none';
       terminalEl.style.display = 'block';
-      startTerminal(terminalEl, profileId, storage, formWrapper);
+      startTerminal(terminalEl, profileId, null, storage, formWrapper);
     } catch {
       // Profile not found, show form.
     }
   }
 });
 
-function startTerminal(terminalEl, profileId, storage, formWrapper) {
+function startTerminal(terminalEl, profileId, identityName, storage, formWrapper) {
   const terminal = new hterm.Terminal({profileId, storage});
   terminal.alwaysUseLegacyPasting = true;
   terminal.decorate(terminalEl);
@@ -210,7 +247,14 @@ function startTerminal(terminalEl, profileId, storage, formWrapper) {
       args: [argstr],
       environment: {},
       connectPage: '',
-      onExit: (code) => {
+      onExit: async (code) => {
+        // Clean up decrypted key from the nassh filesystem.
+        if (identityName) {
+          try {
+            const fs = await getIndexeddbFileSystem();
+            await fs.removeFile(`/.ssh/identity/${identityName}`);
+          } catch { /* already gone */ }
+        }
         terminal.uninstallKeyboard();
         terminalEl.style.display = 'none';
         formWrapper.style.display = '';
@@ -226,14 +270,12 @@ function startTerminal(terminalEl, profileId, storage, formWrapper) {
     {name: localize('TERMINAL_RESET_MENU_LABEL') || 'Reset',
      action: () => terminal.reset()},
   ]);
-
-  globalThis.term_ = terminal;
 }
 
 function populateProfiles(prefs, select) {
   const ids = prefs.get('profile-ids') || [];
   const currentVal = select.value;
-  select.innerHTML = '<option value="">-- New Connection --</option>';
+  select.innerHTML = '<option value="">New connection</option>';
   for (const id of ids) {
     const p = prefs.getProfile(id);
     const desc = p.get('description') || id;
