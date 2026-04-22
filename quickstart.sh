@@ -35,43 +35,66 @@ echo -e "  ${BLUE}https://github.com/tehrhart/sshamrock${NC}"
 echo ""
 
 # --- Gather configuration ---
+# All settings can be pre-set via environment variables for unattended installs.
+# Example: SSHAMROCK_HOST=ssh.example.com SSHAMROCK_IDP=cloudflare \
+#          SSHAMROCK_CF_TEAM=myco SSHAMROCK_CF_AUD=abc123 bash quickstart.sh
+
 info "Configuration"
 echo ""
 
-read -rp "  Public hostname (e.g. ssh.example.com): " PUBLIC_HOST
+if [[ -n "${SSHAMROCK_HOST:-}" ]]; then
+  PUBLIC_HOST="$SSHAMROCK_HOST"
+  ok "Hostname: $PUBLIC_HOST (from env)"
+else
+  read -rp "  Public hostname (e.g. ssh.example.com): " PUBLIC_HOST
+fi
 [[ -n "$PUBLIC_HOST" ]] || error "Hostname is required"
 
-read -rp "  Public port [443]: " PUBLIC_PORT
+PUBLIC_PORT="${SSHAMROCK_PORT:-}"
+if [[ -z "$PUBLIC_PORT" ]]; then
+  read -rp "  Public port [443]: " PUBLIC_PORT
+fi
 PUBLIC_PORT="${PUBLIC_PORT:-443}"
 
-echo ""
-echo "  Identity provider options:"
-echo "    1) none          — no authentication (for testing only)"
-echo "    2) cloudflare    — Cloudflare Access (requires team domain + audience)"
-echo "    3) gcp-iap       — Google IAP (requires audience)"
-echo ""
-read -rp "  Identity provider [1]: " IDP_CHOICE
+IDP_CHOICE="${SSHAMROCK_IDP:-}"
+if [[ -z "$IDP_CHOICE" ]]; then
+  echo ""
+  echo "  Identity provider options:"
+  echo "    1) none          — no authentication (for testing only)"
+  echo "    2) cloudflare    — Cloudflare Access (requires team domain + audience)"
+  echo "    3) gcp-iap       — Google IAP (requires audience)"
+  echo ""
+  read -rp "  Identity provider [1]: " IDP_CHOICE
+fi
 IDP_CHOICE="${IDP_CHOICE:-1}"
 
 IDP="none"
 AUTH_REQUIRED="false"
-CF_TEAM=""
-CF_AUD=""
-IAP_AUD=""
+CF_TEAM="${SSHAMROCK_CF_TEAM:-}"
+CF_AUD="${SSHAMROCK_CF_AUD:-}"
+IAP_AUD="${SSHAMROCK_IAP_AUD:-}"
 
 case "$IDP_CHOICE" in
-  2|cloudflare)
+  2|cloudflare|cloudflare-access)
     IDP="cloudflare-access"
     AUTH_REQUIRED="true"
-    read -rp "  Cloudflare team domain (e.g. mycompany): " CF_TEAM
-    read -rp "  Cloudflare Access audience tag: " CF_AUD
+    if [[ -z "$CF_TEAM" ]]; then
+      read -rp "  Cloudflare team domain (e.g. mycompany): " CF_TEAM
+    fi
+    if [[ -z "$CF_AUD" ]]; then
+      read -rp "  Cloudflare Access audience tag: " CF_AUD
+    fi
     [[ -n "$CF_TEAM" && -n "$CF_AUD" ]] || error "Team domain and audience are required"
+    ok "Identity: Cloudflare Access ($CF_TEAM)"
     ;;
   3|gcp-iap)
     IDP="gcp-iap"
     AUTH_REQUIRED="true"
-    read -rp "  IAP audience (e.g. /projects/123/global/backendServices/456): " IAP_AUD
+    if [[ -z "$IAP_AUD" ]]; then
+      read -rp "  IAP audience (e.g. /projects/123/global/backendServices/456): " IAP_AUD
+    fi
     [[ -n "$IAP_AUD" ]] || error "IAP audience is required"
+    ok "Identity: GCP IAP"
     ;;
   *)
     echo ""
