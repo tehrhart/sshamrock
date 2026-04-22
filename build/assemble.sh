@@ -94,12 +94,13 @@ cp -r "$LIBAPPS/nassh/images" "$DIST/nassh/"
 # Copy nassh third_party (google-smart-card, fonts, etc).
 cp -r "$LIBAPPS/nassh/third_party" "$DIST/nassh/"
 
-# Create symlinks inside nassh/ matching what mkdeps creates.
+# Copy libraries into nassh/ matching the layout mkdeps creates via symlinks.
 # nassh JS files import from ../wassh/, ../libdot/ etc.
-ln -sfn ../wassh "$DIST/nassh/wassh"
-ln -sfn ../libdot "$DIST/nassh/libdot"
-ln -sfn ../hterm "$DIST/nassh/hterm"
-ln -sfn ../wasi-js-bindings "$DIST/nassh/wasi-js-bindings"
+# We use hard copies instead of symlinks for portability (git, tar, Windows).
+cp -r "$DIST/wassh" "$DIST/nassh/wassh"
+cp -r "$DIST/libdot" "$DIST/nassh/libdot"
+cp -r "$DIST/hterm" "$DIST/nassh/hterm"
+cp -r "$DIST/wasi-js-bindings" "$DIST/nassh/wasi-js-bindings"
 
 # ---- Step 4: WASM binary ----
 echo "==> Setting up WASM binary..."
@@ -118,7 +119,7 @@ else
 fi
 
 # ---- Step 5: Locale files at root (lib.f.getURL uses origin + path) ----
-ln -sfn nassh/_locales "$DIST/_locales"
+cp -r "$DIST/nassh/_locales" "$DIST/_locales"
 
 # ---- Step 6: Copy custom web app files ----
 echo "==> Copying web app sources..."

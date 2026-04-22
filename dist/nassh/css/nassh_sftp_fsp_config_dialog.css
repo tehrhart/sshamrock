@@ -1,0 +1,49 @@
+/*
+ * Copyright 2019 The ChromiumOS Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+/**
+ * Styles used by the config dialog box.
+ */
+
+body {
+  margin: 0;
+  padding: 0.5em;
+  background-color: var(--nassh-bg-color);
+  color: var(--nassh-fg-color);
+  font-family: var(--nassh-font-family);
+  font-size: smaller;
+}
+
+input,
+select {
+  border: 1px solid;
+  padding: 3px;
+  line-height: 1.2;
+  font-size: inherit;
+  font-family: inherit;
+  margin: 0.25em;
+  background-color: rgba(255, 255, 255, 0.95); /* yes, white */
+}
+
+/**
+ * The various settings that we want to keep visually aligned.
+ */
+table#aligned-dialog-fields {
+  border: 0px;
+  width: 100%;
+}
+
+.aligned-dialog-labels {
+  text-align: right;
+  white-space: nowrap;
+  /* NB: Keep in sync with .aligned-dialog-fullwidth width. */
+  width: 1%;
+}
+
+.aligned-dialog-fullwidth {
+  /* NB: Keep in sync with .aligned-dialog-labels width. */
+  width: 99%;
+}

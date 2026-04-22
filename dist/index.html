@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>SSH Web Client</title>
+    <link rel="icon" type="image/png" href="nassh/images/dev/icon-32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="nassh/images/dev/icon-128.png" sizes="128x128" />
+    <link rel="stylesheet" href="css/app.css" />
+    <script type="module" src="js/app-main.js"></script>
+  </head>
+  <body>
+    <div id="connect-form-wrapper">
+      <div id="connect-card">
+        <div class="card-header">
+          <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <path d="M8 21h8" /><path d="M12 17v4" />
+            <polyline points="7 8 9 10 7 12" /><line x1="11" y1="12" x2="15" y2="12" />
+          </svg>
+          <h1>SSH Web Client</h1>
+          <p class="subtitle">Secure shell access from your browser</p>
+        </div>
+
+        <form id="connect-form">
+          <div class="form-section">
+            <label for="profile-select">Saved Connections</label>
+            <div class="input-row">
+              <select id="profile-select">
+                <option value="">New connection</option>
+              </select>
+              <button type="button" id="delete-profile" class="icon-btn danger" title="Delete selected profile">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-section grow">
+              <label for="username">Username</label>
+              <input id="username" type="text" autocomplete="username" required
+                     placeholder="root" />
+            </div>
+            <div class="form-section grow">
+              <label for="hostname">Hostname</label>
+              <input id="hostname" type="text" autocomplete="off" required
+                     placeholder="server.example.com" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-section">
+              <label for="port">Port</label>
+              <input id="port" type="number" value="22" min="1" max="65535" />
+            </div>
+            <div class="form-section">
+              <label for="app-mode">Mode</label>
+              <select id="app-mode">
+                <option value="ssh">SSH</option>
+                <option value="sftp">SFTP</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <label>SSH Key <span class="label-hint">(optional)</span></label>
+            <div class="input-row">
+              <select id="identity-select">
+                <option value="">Password authentication</option>
+              </select>
+              <label class="icon-btn" for="import-key" title="Import private key">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              </label>
+              <input type="file" id="import-key" multiple hidden />
+              <button type="button" id="delete-key" class="icon-btn danger" title="Delete selected key">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <button id="connect-btn" type="submit">Connect</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="terminal" style="display: none;"></div>
+
+    <!-- Passphrase dialog — uses type=password for masking + password manager -->
+    <dialog id="passphrase-dialog">
+      <form method="dialog" id="passphrase-form">
+        <h2 id="passphrase-title">Key passphrase</h2>
+        <p id="passphrase-message"></p>
+        <input type="password" id="passphrase-input"
+               autocomplete="current-password" required
+               placeholder="Enter passphrase" />
+        <div class="dialog-actions">
+          <button type="button" id="passphrase-cancel" class="btn-secondary">Cancel</button>
+          <button type="submit" class="btn-primary">OK</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>

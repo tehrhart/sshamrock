@@ -1,8 +1,18 @@
 # SSHamrock
 
-Browser-based SSH and SFTP client — no extensions, no plugins, no VPN.
+Browser-based SSH and SFTP — no extensions, no plugins, no VPN.
 
-SSHamrock repackages Google's [Secure Shell](https://chromium.googlesource.com/apps/libapps/) Chrome extension as a standalone web page served by the same relay server that proxies the SSH connections. One container, one port, one DNS record.
+SSHamrock repackages Google's [Secure Shell](https://chromium.googlesource.com/apps/libapps/) Chrome extension as a standalone web page. It ships as a single server that serves the web client and proxies the SSH connections on the same port.
+
+## Quick start
+
+```bash
+git clone https://github.com/tehrhart/ssh-web-app.git
+cd ssh-web-app
+sudo bash quickstart.sh
+```
+
+The installer prompts for your public hostname and identity provider, then handles everything: Python venv, relay server, static files, systemd service. Point any reverse proxy at `localhost:8080` and you're live.
 
 ## How it works
 
@@ -14,94 +24,87 @@ Browser (any Chromium)           SSHamrock Server              SSH Target
 │ Relay client JS      │────│  /v4/connect → TCP    │────│              │
 └─────────────────────┘    └──────────────────────┘    └──────────────┘
          ▲                          ▲
-         └── Protected by Cloudflare Access / Google IAP ──┘
+         └──── Authenticating reverse proxy ────┘
 ```
 
-1. User visits `https://ssh.example.com` and authenticates via SSO (Cloudflare Access, Google IAP, etc.)
-2. The page loads a full SSH client — hterm terminal emulator + OpenSSH compiled to WebAssembly
-3. User picks a host, and the browser opens a WebSocket to the same server
-4. The relay bridges the WebSocket to a TCP connection to the target SSH server
-5. All SSH encryption happens inside the browser — the relay sees only opaque SSH traffic
+1. User visits the page and authenticates via your identity provider
+2. The browser loads a full SSH client — hterm + OpenSSH compiled to WebAssembly
+3. User picks a host and the browser opens a WebSocket to the same server
+4. The relay bridges the WebSocket to a TCP connection to the target
+5. All SSH encryption happens inside the browser — the relay sees only opaque ciphertext
 
-## Quick start
+## Authentication
 
-### Prerequisites
+SSHamrock itself doesn't authenticate users — it relies on a reverse proxy in front of it that handles SSO and passes identity headers. Any proxy that terminates auth and forwards to `localhost:8080` will work:
 
-- Linux server with Python 3.11+
-- [nassh-proxy](https://github.com/tehrhart/nassh-proxy) relay server
-- [libapps](https://chromium.googlesource.com/apps/libapps/) checkout (for the build step)
-- Node.js 18+ (for rollup)
-- The `ssh.wasm` binary (extracted from the [Secure Shell extension](https://chrome.google.com/webstore/detail/iodihamcpbpeioajjeobimgagajmlibd) or built from source)
+| Proxy | How it works |
+|-------|-------------|
+| **Cloudflare Access** | Cloudflare Tunnel → `localhost:8080`. JWT in `Cf-Access-Jwt-Assertion` header. First-class support via `RELAY_IDENTITY_PROVIDER=cloudflare-access`. |
+| **Google IAP** | GCE/GKE backend → `localhost:8080`. JWT in `x-goog-iap-jwt-assertion` header. First-class support via `RELAY_IDENTITY_PROVIDER=gcp-iap`. |
+| **nginx + oauth2-proxy** | oauth2-proxy handles SSO, nginx forwards to `localhost:8080`. Set `RELAY_IDENTITY_PROVIDER=none` and `RELAY_AUTH_REQUIRED=false` (proxy handles auth). |
+| **Tailscale / ZeroTier** | Mesh VPN limits who can reach the server. Same config as above. |
+| **Any other** | Anything that authenticates the user and proxies to `localhost:8080`. |
 
-### Build
+The quickstart installer prompts for Cloudflare or GCP IAP details. For other proxies, choose "none" and let your proxy handle authentication.
+
+## Features
+
+- **SSH and SFTP** in the browser — interactive terminal or command-line SFTP
+- **SSH key management** — import private keys, encrypted at rest with a passphrase (PBKDF2 + AES-256-GCM via Web Crypto API). Browser password manager can save the passphrase.
+- **Saved connections** — profiles persist in localStorage
+- **URL shortcuts** — pre-populate with `?user=root&host=server.example.com`
+- **Session resumption** — relay buffers data during brief disconnects (v4 protocol)
+- **Single binary deployment** — one server, one port, one container
+
+## Configuration
+
+Config lives at `/etc/ssh-relay/env` (written by the installer). Key settings:
 
 ```bash
-git clone https://github.com/tehrhart/ssh-web-app.git
-cd ssh-web-app
+RELAY_PUBLIC_HOST=ssh.example.com   # Your public hostname
+RELAY_PUBLIC_PORT=443               # Public-facing port
+RELAY_IDENTITY_PROVIDER=cloudflare-access  # or gcp-iap, or none
+RELAY_AUTH_REQUIRED=true
+RELAY_STATIC_DIR=/opt/ssh-relay/static
 
-# Build the static web client from libapps sources
-bash build/assemble.sh /path/to/libapps
-
-# Copy the WASM binary (from an installed Chrome extension)
-cp ~/.config/google-chrome/Default/Extensions/iodihamcpbpeioajjeobimgagajmlibd/*/plugin/wasm/ssh.wasm dist/plugin/wasm/
+# Target policy (optional) — restrict which hosts the relay can reach
+RELAY_TARGET_ALLOWLIST=10.0.0.0/8   # Comma-separated CIDRs
 ```
 
-### Deploy
-
-Copy the built `dist/` directory to the nassh-proxy relay server as a `static/` directory, and set `RELAY_STATIC_DIR=/path/to/static` in the relay's environment. The relay serves both the web client and the SSH WebSocket proxy on the same port.
-
-```bash
-# On the relay server
-cp -r dist/ /opt/ssh-relay/static/
-echo 'RELAY_STATIC_DIR=/opt/ssh-relay/static' >> /etc/ssh-relay/env
-systemctl restart ssh-relay
-```
-
-That's it. Visit `https://your-relay-host/` in any Chromium browser.
-
-For detailed deployment instructions (systemd, Docker, Cloudflare Tunnel), see [DEPLOY.md](DEPLOY.md).
-
-### URL shortcuts
-
-Pre-populate the connection form with URL parameters:
-
-```
-https://ssh.example.com/?user=root&host=server.internal.com&port=22&mode=ssh
-```
+Full configuration reference: [nassh-proxy docs](https://github.com/tehrhart/nassh-proxy).
 
 ## Security model
 
-### Network security
+**Network:** The relay transports opaque SSH ciphertext — it cannot read passwords, keys, or session content. Loopback, link-local, and cloud metadata IPs are blocked by default.
 
-- **Zero trust** — the relay and web client sit behind an identity-aware proxy (Cloudflare Access, Google IAP). Every request carries a verified JWT.
-- **Same-origin** — the web client and relay are served from the same origin. No CORS. The browser automatically includes auth cookies on all requests.
-- **End-to-end SSH encryption** — the relay transports opaque SSH traffic over WebSocket. It cannot read passwords, key material, or session content.
-- **Target policy** — the relay restricts which hosts/ports can be reached (allowlist/denylist CIDRs). Loopback, link-local, and cloud metadata ranges are blocked by default.
+**Browser:** A strict Content Security Policy (`script-src 'self'`) prevents XSS. SSH private keys are encrypted at rest with PBKDF2 + AES-256-GCM and only decrypted into the WASM filesystem during an active connection. Stale keys are wiped on startup (crash recovery). URL parameters are stripped from browser history.
 
-### Browser security
-
-- **Content Security Policy** — strict CSP (`script-src 'self'`) prevents XSS from exfiltrating SSH keys or injecting into terminal sessions.
-- **SSH keys encrypted at rest** — private keys are encrypted with a user passphrase (PBKDF2 + AES-256-GCM) before storage. The browser's password manager can save the passphrase, protected by the OS keychain and biometrics.
-- **Keys decrypted only during connection** — on connect, the key is decrypted into the WASM filesystem; on disconnect, it's removed.
-- **Cross-Origin Isolation** — COOP/COEP headers enable `SharedArrayBuffer` for the WASM worker while preventing cross-origin attacks.
-- **No referrer leakage** — `Referrer-Policy: no-referrer` and URL parameters are stripped from browser history after reading.
-
-### What the relay can see
+**Headers:** COOP/COEP enable SharedArrayBuffer for the WASM worker. `Referrer-Policy: no-referrer` and `X-Content-Type-Options: nosniff` are set on all responses.
 
 | Data | Visible to relay? |
 |------|-------------------|
-| Who connected (identity from JWT) | Yes |
+| Who connected (JWT identity) | Yes |
 | Target host and port | Yes |
 | SSH traffic content | No (encrypted) |
 | Passwords typed in SSH | No (encrypted) |
 | SSH private keys | No (never leave browser) |
 
+## Building from source (optional)
+
+The repo includes a pre-built `dist/` directory with everything needed. If you want to modify the web client or update the nassh components:
+
+```bash
+# Prerequisites: Node.js 18+, libapps checkout
+bash build/assemble.sh /path/to/libapps
+cp ~/.config/google-chrome/Default/Extensions/iodihamcpbpeioajjeobimgagajmlibd/*/plugin/wasm/ssh.wasm dist/plugin/wasm/
+```
+
 ## Tech stack
 
 | Component | Source |
 |-----------|--------|
-| Terminal emulator | [hterm](https://chromium.googlesource.com/apps/libapps/+/HEAD/hterm/) |
-| SSH client | [OpenSSH compiled to WebAssembly](https://chromium.googlesource.com/apps/libapps/+/HEAD/ssh_client/) |
+| Terminal | [hterm](https://chromium.googlesource.com/apps/libapps/+/HEAD/hterm/) |
+| SSH client | [OpenSSH → WebAssembly](https://chromium.googlesource.com/apps/libapps/+/HEAD/ssh_client/) |
 | Relay protocol | [Corp Relay v4](https://chromium.googlesource.com/apps/libapps/+/HEAD/nassh/docs/relay-protocol.md) |
 | Relay server | [nassh-proxy](https://github.com/tehrhart/nassh-proxy) (FastAPI/Python) |
 | Key encryption | Web Crypto API (PBKDF2 + AES-256-GCM) |

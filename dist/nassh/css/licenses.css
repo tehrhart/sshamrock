@@ -1,0 +1,59 @@
+/*
+ * Copyright 2022 The ChromiumOS Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+/**
+ * Styles in the licensing page.
+ */
+
+:root {
+  --google-blue-50: rgb(232, 240, 254);
+  --google-grey-800: rgb(60, 64, 67);
+
+  --product-background: var(--google-blue-50);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --product-background: var(--google-grey-800);
+  }
+}
+
+body {
+  padding: 1em;
+}
+pre.license {
+  display: none;
+  font-size: smaller;
+}
+h2.package {
+  clear: both;
+  background-color: var(--product-background);
+  width: 100%;
+}
+a.license {
+  float: right;
+  font-size: smaller;
+}
+
+/* The licensing content is very verbose. Make it dense. */
+@media print {
+  h1 {
+    display: none;
+  }
+
+  pre.license {
+    display: block;
+    margin: 0;
+    padding: 0;
+  }
+
+  h2.package {
+    margin-bottom: 0.5em;
+  }
+
+  a.license {
+    display: none;
+  }
+}
