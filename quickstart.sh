@@ -6,7 +6,7 @@ set -euo pipefail
 
 INSTALL_DIR="/opt/ssh-relay"
 CONFIG_DIR="/etc/ssh-relay"
-LOG_DIR="/var/log/ssh-relay"
+LOG_DIR="/var/log/sshamrock"
 RELAY_REPO="https://github.com/tehrhart/nassh-proxy.git"
 SERVICE_NAME="ssh-relay"
 
@@ -169,7 +169,10 @@ fi
 
 cat >> "$CONFIG_DIR/env" << 'ENVEOF'
 
-RELAY_LOG_SINKS=stderr
+RELAY_LOG_SINKS=stderr,file
+RELAY_LOG_FILE_PATH=/var/log/sshamrock/audit.jsonl
+RELAY_LOG_FILE_MAX_BYTES=104857600
+RELAY_LOG_FILE_BACKUP_COUNT=10
 RELAY_STATIC_DIR=/opt/ssh-relay/static
 ENVEOF
 
@@ -201,7 +204,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/log/ssh-relay
+ReadWritePaths=/var/log/sshamrock
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

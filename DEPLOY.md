@@ -12,8 +12,8 @@ For most deployments, use `quickstart.sh` (interactive) or `sshamrock-bootstrap.
 ```bash
 # Create user and directories
 useradd -r -s /sbin/nologin ssh-relay
-mkdir -p /opt/ssh-relay /etc/ssh-relay /var/log/ssh-relay
-chown ssh-relay:ssh-relay /var/log/ssh-relay
+mkdir -p /opt/ssh-relay /etc/ssh-relay /var/log/sshamrock
+chown ssh-relay:ssh-relay /var/log/sshamrock
 
 # Clone relay server
 git clone https://github.com/tehrhart/nassh-proxy.git /opt/ssh-relay/src
@@ -40,7 +40,10 @@ RELAY_AUTH_REQUIRED=true
 RELAY_CF_TEAM_DOMAIN=yourteam
 RELAY_CF_AUDIENCE=your-audience-tag
 
-RELAY_LOG_SINKS=stderr
+RELAY_LOG_SINKS=stderr,file
+RELAY_LOG_FILE_PATH=/var/log/sshamrock/audit.jsonl
+RELAY_LOG_FILE_MAX_BYTES=104857600
+RELAY_LOG_FILE_BACKUP_COUNT=10
 RELAY_STATIC_DIR=/opt/ssh-relay/static
 ```
 
@@ -75,7 +78,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/log/ssh-relay
+ReadWritePaths=/var/log/sshamrock
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
