@@ -19,6 +19,11 @@ export SSHAMROCK_CF_TEAM="CHANGE_ME"               # Cloudflare team domain
 export SSHAMROCK_CF_AUD="CHANGE_ME"                # Cloudflare Access audience tag
 CLOUDFLARED_TOKEN="CHANGE_ME"                      # Cloudflare Tunnel token
 
+# Network binding — for remote cloudflared load balancers, set BIND_IP
+# to a LAN address (or 0.0.0.0) and TRUSTED_PROXIES to the cloudflared IPs.
+export SSHAMROCK_BIND_IP="127.0.0.1"              # 127.0.0.1 | 0.0.0.0 | specific LAN IP
+export SSHAMROCK_TRUSTED_PROXIES="127.0.0.1"      # Comma-separated IPs/CIDRs of upstream proxies
+
 # For GCP IAP instead, use:
 # export SSHAMROCK_IDP="gcp-iap"
 # export SSHAMROCK_IAP_AUD="/projects/123/global/backendServices/456"

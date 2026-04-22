@@ -38,6 +38,11 @@ echo ""
 # All settings can be pre-set via environment variables for unattended installs.
 # Example: SSHAMROCK_HOST=ssh.example.com SSHAMROCK_IDP=cloudflare \
 #          SSHAMROCK_CF_TEAM=myco SSHAMROCK_CF_AUD=abc123 bash quickstart.sh
+#
+# Network: SSHAMROCK_BIND_IP and SSHAMROCK_TRUSTED_PROXIES control where the
+# relay listens and which upstream IPs may set forwarded-for headers.
+# Default: 127.0.0.1 (localhost only). For remote cloudflared load balancers,
+# set BIND_IP to a LAN address and TRUSTED_PROXIES to the cloudflared IPs.
 
 info "Configuration"
 echo ""
@@ -103,6 +108,31 @@ case "$IDP_CHOICE" in
     ;;
 esac
 
+# --- Network binding ---
+BIND_IP="${SSHAMROCK_BIND_IP:-}"
+if [[ -z "$BIND_IP" ]]; then
+  echo ""
+  echo "  Listener bind address:"
+  echo "    127.0.0.1  — localhost only (cloudflared on same machine)"
+  echo "    0.0.0.0    — all interfaces (remote load balancer)"
+  echo "    10.x.x.x   — specific LAN IP"
+  echo ""
+  read -rp "  Bind IP [127.0.0.1]: " BIND_IP
+fi
+BIND_IP="${BIND_IP:-127.0.0.1}"
+
+TRUSTED_PROXIES="${SSHAMROCK_TRUSTED_PROXIES:-}"
+if [[ "$BIND_IP" != "127.0.0.1" && -z "$TRUSTED_PROXIES" ]]; then
+  echo ""
+  echo "  Since the relay is not localhost-only, you must specify which"
+  echo "  upstream IPs are trusted to set X-Forwarded-For headers."
+  echo "  Comma-separated IPs or CIDRs (e.g. 10.0.0.0/8,172.16.0.0/12)"
+  echo ""
+  read -rp "  Trusted proxy IPs: " TRUSTED_PROXIES
+  [[ -n "$TRUSTED_PROXIES" ]] || error "Trusted proxies required when binding to a non-localhost address"
+fi
+TRUSTED_PROXIES="${TRUSTED_PROXIES:-127.0.0.1}"
+
 # --- Create user and directories ---
 info "Creating service user and directories"
 id "$SERVICE_NAME" &>/dev/null || useradd -r -s /sbin/nologin "$SERVICE_NAME"
@@ -158,8 +188,9 @@ RELAY_IAP_AUDIENCE=$IAP_AUD
 ENVEOF
 fi
 
-cat >> "$CONFIG_DIR/env" << 'ENVEOF'
+cat >> "$CONFIG_DIR/env" << ENVEOF
 
+RELAY_TRUSTED_PROXIES=$TRUSTED_PROXIES
 RELAY_LOG_SINKS=stderr
 RELAY_STATIC_DIR=/opt/ssh-relay/static
 ENVEOF
@@ -170,7 +201,7 @@ ok "Config written to $CONFIG_DIR/env"
 
 # --- Write systemd service ---
 info "Installing systemd service"
-cat > "/etc/systemd/system/$SERVICE_NAME.service" << 'SVCEOF'
+cat > "/etc/systemd/system/$SERVICE_NAME.service" << SVCEOF
 [Unit]
 Description=SSHamrock — browser-based SSH relay
 After=network-online.target
@@ -182,9 +213,9 @@ User=ssh-relay
 Group=ssh-relay
 EnvironmentFile=/etc/ssh-relay/env
 WorkingDirectory=/opt/ssh-relay/src
-ExecStart=/opt/ssh-relay/.venv/bin/uvicorn ssh_relay.app:app \
-    --host 127.0.0.1 --port 8080 \
-    --proxy-headers --forwarded-allow-ips "127.0.0.1"
+ExecStart=/opt/ssh-relay/.venv/bin/uvicorn ssh_relay.app:app \\
+    --host $BIND_IP --port 8080 \\
+    --proxy-headers --forwarded-allow-ips "$TRUSTED_PROXIES"
 Restart=always
 RestartSec=2
 LimitNOFILE=65536
@@ -207,7 +238,7 @@ ok "Service started"
 
 # --- Verify ---
 sleep 2
-if curl -sf http://127.0.0.1:8080/healthz > /dev/null 2>&1; then
+if curl -sf "http://${BIND_IP}:8080/healthz" > /dev/null 2>&1; then
   ok "Health check passed"
 else
   error "Service failed to start. Check: journalctl -u $SERVICE_NAME"
@@ -216,16 +247,17 @@ fi
 echo ""
 echo -e "${GREEN}${BOLD}  SSHamrock is running!${NC}"
 echo ""
-echo "  Relay listening on:  http://127.0.0.1:8080"
+echo "  Relay listening on:  http://${BIND_IP}:8080"
+echo "  Trusted proxies:     $TRUSTED_PROXIES"
 echo "  Public hostname:     $PUBLIC_HOST"
 echo ""
 if [[ "$AUTH_REQUIRED" == "false" ]]; then
   echo -e "  ${RED}⚠  No authentication configured.${NC}"
-  echo "  Point any reverse proxy at localhost:8080 to get started."
+  echo "  Point any reverse proxy at ${BIND_IP}:8080 to get started."
   echo "  For production, re-run with Cloudflare Access or Google IAP."
 else
   echo "  Point your authenticating reverse proxy (Cloudflare Tunnel,"
-  echo "  GCP IAP, nginx + oauth2-proxy, etc.) at localhost:8080."
+  echo "  GCP IAP, nginx + oauth2-proxy, etc.) at ${BIND_IP}:8080."
 fi
 echo ""
 echo "  Config:   $CONFIG_DIR/env"
