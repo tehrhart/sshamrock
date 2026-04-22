@@ -6,6 +6,8 @@ SSHamrock repackages Google's [Secure Shell](https://chromium.googlesource.com/a
 
 ## Quick start
 
+### Interactive (on an existing server)
+
 ```bash
 git clone https://github.com/tehrhart/sshamrock.git
 cd sshamrock
@@ -13,6 +15,18 @@ sudo bash quickstart.sh
 ```
 
 The installer prompts for your public hostname and identity provider, then handles everything: Python venv, relay server, static files, systemd service. Point any reverse proxy at `localhost:8080` and you're live.
+
+### Automated (cloud VM bootstrap)
+
+For DigitalOcean, AWS, GCP, or any cloud provider that supports startup scripts:
+
+1. Open [`sshamrock-bootstrap.sh`](sshamrock-bootstrap.sh)
+2. Edit the settings at the top (hostname, Cloudflare team/audience, tunnel token)
+3. Paste the entire script as your VM's **User Data** / startup script
+
+The VM boots, installs all dependencies (including `cloudflared`), configures the relay, and comes up ready. Logs at `/var/log/sshamrock-init.log`.
+
+This works with any cloud VM — DigitalOcean Droplets, AWS EC2, GCP Compute Engine, Azure VMs, etc.
 
 ## How it works
 
