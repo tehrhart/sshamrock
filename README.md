@@ -4,6 +4,8 @@ Browser-based SSH and SFTP — no extensions, no plugins, no VPN.
 
 SSHamrock repackages Google's [Secure Shell](https://chromium.googlesource.com/apps/libapps/) Chrome extension as a standalone web page. It ships as a single server that serves the web client and proxies the SSH connections on the same port.
 
+![SSHamrock connection dialog](screenshot.png)
+
 ## Quick start
 
 ### Interactive (on an existing server)
