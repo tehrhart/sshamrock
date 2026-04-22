@@ -7,8 +7,8 @@ SSHamrock repackages Google's [Secure Shell](https://chromium.googlesource.com/a
 ## Quick start
 
 ```bash
-git clone https://github.com/tehrhart/ssh-web-app.git
-cd ssh-web-app
+git clone https://github.com/tehrhart/sshamrock.git
+cd sshamrock
 sudo bash quickstart.sh
 ```
 

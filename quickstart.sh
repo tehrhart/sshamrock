@@ -26,12 +26,12 @@ command -v python3 >/dev/null || error "Python 3.11+ is required"
 command -v git >/dev/null || error "git is required"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-[[ -d "$SCRIPT_DIR/dist" ]] || error "dist/ directory not found. Run from the ssh-web-app repo root."
+[[ -d "$SCRIPT_DIR/dist" ]] || error "dist/ directory not found. Run from the sshamrock repo root."
 [[ -f "$SCRIPT_DIR/dist/plugin/wasm/ssh.wasm" ]] || error "dist/plugin/wasm/ssh.wasm not found."
 
 echo ""
 echo -e "${BOLD}  SSHamrock — Browser-based SSH client${NC}"
-echo -e "  ${BLUE}https://github.com/tehrhart/ssh-web-app${NC}"
+echo -e "  ${BLUE}https://github.com/tehrhart/sshamrock${NC}"
 echo ""
 
 # --- Gather configuration ---
