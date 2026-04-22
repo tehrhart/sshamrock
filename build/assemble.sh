@@ -135,8 +135,12 @@ find "$DIST" -name '*_test.js' -delete
 find "$DIST" -name 'chrome_mock_for_test.js' -delete
 find "$DIST" -name 'crosh_main.js' -delete
 # Google-internal metrics reporter contains corp API keys that trigger
-# GitHub secret scanning alerts. Not needed outside Google.
-find "$DIST" -name 'nassh_goog_metrics_reporter.js' -delete
+# GitHub secret scanning alerts. Replace with a no-op stub since
+# nassh_stream_relay_corpv4.js imports from it.
+find "$DIST" -name 'nassh_goog_metrics_reporter.js' -exec sh -c '
+  echo "// Stub: Google-internal metrics reporter removed (contained corp API keys)." > "$1"
+  echo "export class GoogMetricsReporter { constructor() {} reportLatency() {} }" >> "$1"
+' _ {} \;
 
 echo ""
 echo "==> Build complete: $DIST"
