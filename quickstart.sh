@@ -38,11 +38,6 @@ echo ""
 # All settings can be pre-set via environment variables for unattended installs.
 # Example: SSHAMROCK_HOST=ssh.example.com SSHAMROCK_IDP=cloudflare \
 #          SSHAMROCK_CF_TEAM=myco SSHAMROCK_CF_AUD=abc123 bash quickstart.sh
-#
-# Network: SSHAMROCK_BIND_IP and SSHAMROCK_TRUSTED_PROXIES control where the
-# relay listens and which upstream IPs may set forwarded-for headers.
-# Default: 127.0.0.1 (localhost only). For remote cloudflared load balancers,
-# set BIND_IP to a LAN address and TRUSTED_PROXIES to the cloudflared IPs.
 
 info "Configuration"
 echo ""
@@ -109,29 +104,13 @@ case "$IDP_CHOICE" in
 esac
 
 # --- Network binding ---
-BIND_IP="${SSHAMROCK_BIND_IP:-}"
-if [[ -z "$BIND_IP" ]]; then
-  echo ""
-  echo "  Listener bind address:"
-  echo "    127.0.0.1  — localhost only (cloudflared on same machine)"
-  echo "    0.0.0.0    — all interfaces (remote load balancer)"
-  echo "    10.x.x.x   — specific LAN IP"
-  echo ""
-  read -rp "  Bind IP [127.0.0.1]: " BIND_IP
-fi
-BIND_IP="${BIND_IP:-127.0.0.1}"
-
-TRUSTED_PROXIES="${SSHAMROCK_TRUSTED_PROXIES:-}"
-if [[ "$BIND_IP" != "127.0.0.1" && -z "$TRUSTED_PROXIES" ]]; then
-  echo ""
-  echo "  Since the relay is not localhost-only, you must specify which"
-  echo "  upstream IPs are trusted to set X-Forwarded-For headers."
-  echo "  Comma-separated IPs or CIDRs (e.g. 10.0.0.0/8,172.16.0.0/12)"
-  echo ""
-  read -rp "  Trusted proxy IPs: " TRUSTED_PROXIES
-  [[ -n "$TRUSTED_PROXIES" ]] || error "Trusted proxies required when binding to a non-localhost address"
-fi
-TRUSTED_PROXIES="${TRUSTED_PROXIES:-127.0.0.1}"
+# Default: 0.0.0.0 (all interfaces). Safe because JWT validation is the
+# real auth gate — not network-level IP restrictions. Trusted proxies
+# defaults to "*" (any upstream can set X-Forwarded-For for logging).
+# Override via SSHAMROCK_BIND_IP / SSHAMROCK_TRUSTED_PROXIES if you need
+# tighter control over audit log source-IP accuracy.
+BIND_IP="${SSHAMROCK_BIND_IP:-0.0.0.0}"
+TRUSTED_PROXIES="${SSHAMROCK_TRUSTED_PROXIES:-*}"
 
 # --- Create user and directories ---
 info "Creating service user and directories"
@@ -188,9 +167,8 @@ RELAY_IAP_AUDIENCE=$IAP_AUD
 ENVEOF
 fi
 
-cat >> "$CONFIG_DIR/env" << ENVEOF
+cat >> "$CONFIG_DIR/env" << 'ENVEOF'
 
-RELAY_TRUSTED_PROXIES=$TRUSTED_PROXIES
 RELAY_LOG_SINKS=stderr
 RELAY_STATIC_DIR=/opt/ssh-relay/static
 ENVEOF
