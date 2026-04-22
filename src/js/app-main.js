@@ -282,7 +282,7 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
 
 function startTerminal(terminalEl, profileId, identityName, storage, formWrapper) {
   const terminal = new hterm.Terminal({profileId, storage});
-  terminal.alwaysUseLegacyPasting = true;
+  terminal.alwaysUseLegacyPasting = false;
   terminal.decorate(terminalEl);
   terminal.installKeyboard();
 
@@ -296,7 +296,7 @@ function startTerminal(terminalEl, profileId, identityName, storage, formWrapper
       syncStorage: storage,
       args: [argstr],
       environment: {},
-      connectPage: '',
+      connectPage: '/',
       onExit: async (code) => {
         // Clean up decrypted key from the nassh filesystem.
         if (identityName) {
