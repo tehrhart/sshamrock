@@ -128,12 +128,15 @@ mkdir -p "$DIST/js" "$DIST/css"
 cp "$PROJECT_DIR/src/js/"*.js "$DIST/js/"
 cp "$PROJECT_DIR/src/css/"*.css "$DIST/css/"
 
-# ---- Step 7: Remove test files to reduce size ----
-echo "==> Cleaning up test files..."
+# ---- Step 7: Remove unnecessary files ----
+echo "==> Cleaning up..."
 find "$DIST" -name '*_tests.js' -delete
 find "$DIST" -name '*_test.js' -delete
 find "$DIST" -name 'chrome_mock_for_test.js' -delete
 find "$DIST" -name 'crosh_main.js' -delete
+# Google-internal metrics reporter contains corp API keys that trigger
+# GitHub secret scanning alerts. Not needed outside Google.
+find "$DIST" -name 'nassh_goog_metrics_reporter.js' -delete
 
 echo ""
 echo "==> Build complete: $DIST"
