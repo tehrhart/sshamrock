@@ -59,7 +59,9 @@ export function deleteStoredKey(name) {
 }
 
 function arrayToBase64(arr) {
-  return btoa(String.fromCharCode(...arr));
+  let bin = '';
+  for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+  return btoa(bin);
 }
 
 function base64ToArray(b64) {

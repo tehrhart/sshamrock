@@ -23,6 +23,17 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
   await cleanupChromeSockets();
   await loadMessages();
 
+  // Wipe any decrypted keys left behind by a crash or forced tab close.
+  try {
+    const fs = await getIndexeddbFileSystem();
+    await fs.createDirectory('/.ssh');
+    await fs.createDirectory('/.ssh/identity');
+    const entries = await fs.readDirectory('/.ssh/identity');
+    for (const entry of entries.files || []) {
+      await fs.removeFile(`/.ssh/identity/${entry.name}`);
+    }
+  } catch { /* empty dir or first run */ }
+
   const prefs = new PreferenceManager(storage);
   const localPrefs = new LocalPreferenceManager();
   await prefs.readStorage();
@@ -146,8 +157,8 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
       importKeyInput.value = '';
       return;
     }
-    if (passphrase.length < 4) {
-      alert('Passphrase must be at least 4 characters.');
+    if (passphrase.length < 8) {
+      alert('Passphrase must be at least 8 characters.');
       importKeyInput.value = '';
       return;
     }
@@ -257,6 +268,7 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
   const hash = location.hash.slice(1);
   if (hash.startsWith('profile-id:')) {
     const profileId = hash.split(':')[1];
+    if (!/^[a-zA-Z0-9]+$/.test(profileId)) return;
     try {
       prefs.getProfile(profileId);
       formWrapper.style.display = 'none';
