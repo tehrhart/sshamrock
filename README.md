@@ -14,7 +14,7 @@ cd sshamrock
 sudo bash quickstart.sh
 ```
 
-The installer prompts for your public hostname and identity provider, then handles everything: Python venv, relay server, static files, systemd service. Point any reverse proxy at `localhost:8080` and you're live.
+The installer prompts for your public hostname and identity provider, then handles everything: Python venv, relay server, static files, systemd service. Point any reverse proxy at port `8080` and you're live.
 
 ### Automated (cloud VM bootstrap)
 
@@ -49,15 +49,15 @@ Browser (any Chromium)           SSHamrock Server              SSH Target
 
 ## Authentication
 
-SSHamrock itself doesn't authenticate users — it relies on a reverse proxy in front of it that handles SSO and passes identity headers. Any proxy that terminates auth and forwards to `localhost:8080` will work:
+SSHamrock itself doesn't authenticate users — it relies on a reverse proxy in front of it that handles SSO and passes identity headers. Any proxy that terminates auth and forwards to port `8080` will work:
 
 | Proxy | How it works |
 |-------|-------------|
-| **Cloudflare Access** | Cloudflare Tunnel → `localhost:8080`. JWT in `Cf-Access-Jwt-Assertion` header. First-class support via `RELAY_IDENTITY_PROVIDER=cloudflare-access`. |
-| **Google IAP** | GCE/GKE backend → `localhost:8080`. JWT in `x-goog-iap-jwt-assertion` header. First-class support via `RELAY_IDENTITY_PROVIDER=gcp-iap`. |
-| **nginx + oauth2-proxy** | oauth2-proxy handles SSO, nginx forwards to `localhost:8080`. Set `RELAY_IDENTITY_PROVIDER=none` and `RELAY_AUTH_REQUIRED=false` (proxy handles auth). |
+| **Cloudflare Access** | Cloudflare Tunnel → port `8080`. JWT in `Cf-Access-Jwt-Assertion` header. First-class support via `RELAY_IDENTITY_PROVIDER=cloudflare-access`. |
+| **Google IAP** | GCE/GKE backend → port `8080`. JWT in `x-goog-iap-jwt-assertion` header. First-class support via `RELAY_IDENTITY_PROVIDER=gcp-iap`. |
+| **nginx + oauth2-proxy** | oauth2-proxy handles SSO, nginx forwards to port `8080`. Set `RELAY_IDENTITY_PROVIDER=none` and `RELAY_AUTH_REQUIRED=false` (proxy handles auth). |
 | **Tailscale / ZeroTier** | Mesh VPN limits who can reach the server. Same config as above. |
-| **Any other** | Anything that authenticates the user and proxies to `localhost:8080`. |
+| **Any other** | Anything that authenticates the user and proxies to port `8080`. |
 
 The quickstart installer prompts for Cloudflare or GCP IAP details. For other proxies, choose "none" and let your proxy handle authentication.
 

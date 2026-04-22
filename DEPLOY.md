@@ -1,64 +1,33 @@
-# Quick Deploy — SSH Web Client + Relay
+# Manual Deployment Reference
 
-Single-server deployment: the relay serves both the SSH WebSocket proxy
-and the static web client on one port behind a Cloudflare Tunnel.
+For most deployments, use `quickstart.sh` (interactive) or `sshamrock-bootstrap.sh` (automated). This document covers manual setup for custom environments.
 
 ## Prerequisites
 
 - Linux server (Ubuntu 22.04+ / Debian 12+) with Python 3.11+
-- Cloudflare Tunnel (`cloudflared`) forwarding to `localhost:8080`
-- Cloudflare Access application protecting the tunnel's public hostname
-- The `libapps` repo checked out (for building the web client)
-- Node.js 18+ (for the rollup build step)
+- An authenticating reverse proxy forwarding to port `8080` (Cloudflare Tunnel, GCP IAP, nginx, etc.)
 
-## Build the web client (on your dev machine)
+## Install
 
 ```bash
-cd SSH-web-app
-bash build/assemble.sh /path/to/libapps
-# If ssh.wasm is missing, extract from Chrome extension:
-cp ~/.config/google-chrome/Default/Extensions/iodihamcpbpeioajjeobimgagajmlibd/*/plugin/wasm/ssh.wasm dist/plugin/wasm/
-```
+# Create user and directories
+useradd -r -s /sbin/nologin ssh-relay
+mkdir -p /opt/ssh-relay /etc/ssh-relay /var/log/ssh-relay
+chown ssh-relay:ssh-relay /var/log/ssh-relay
 
-## Deploy (from your dev machine to the server)
+# Clone relay server
+git clone https://github.com/tehrhart/nassh-proxy.git /opt/ssh-relay/src
 
-```bash
-SERVER=root@your-server
-
-# Package
-tar czf /tmp/ssh-deploy.tar.gz --exclude='.git' --exclude='__pycache__' \
-    --exclude='.venv' -C /path/to/SSH-proxy .
-tar czf /tmp/ssh-webclient.tar.gz -C SSH-web-app/dist .
-
-# Upload
-scp /tmp/ssh-deploy.tar.gz /tmp/ssh-webclient.tar.gz $SERVER:/tmp/
-
-# Install (SSH in and run)
-ssh $SERVER bash -s << 'EOF'
-set -euo pipefail
-
-# Create user and directories (first time only)
-id ssh-relay &>/dev/null || useradd -r -s /sbin/nologin ssh-relay
-mkdir -p /opt/ssh-relay/{src,static} /etc/ssh-relay /var/log/ssh-relay
-chown ssh-relay:ssh-relay /opt/ssh-relay /var/log/ssh-relay
-
-# Deploy code
-rm -rf /opt/ssh-relay/src/*
-tar xzf /tmp/ssh-deploy.tar.gz -C /opt/ssh-relay/src/
-rm -rf /opt/ssh-relay/static/*
-tar xzf /tmp/ssh-webclient.tar.gz -C /opt/ssh-relay/static/
-chown -R ssh-relay:ssh-relay /opt/ssh-relay/
-
-# Create venv and install (first time or after dependency changes)
+# Create venv and install
 python3 -m venv /opt/ssh-relay/.venv
 /opt/ssh-relay/.venv/bin/pip install --no-cache-dir -e /opt/ssh-relay/src/
 
-# Clean up
-rm /tmp/ssh-deploy.tar.gz /tmp/ssh-webclient.tar.gz
-EOF
+# Deploy web client (from the sshamrock repo)
+cp -r dist/ /opt/ssh-relay/static/
+chown -R ssh-relay:ssh-relay /opt/ssh-relay/
 ```
 
-## Configure (first time only)
+## Configure
 
 Write `/etc/ssh-relay/env`:
 
@@ -69,17 +38,24 @@ RELAY_PUBLIC_PORT=443
 RELAY_IDENTITY_PROVIDER=cloudflare-access
 RELAY_AUTH_REQUIRED=true
 RELAY_CF_TEAM_DOMAIN=yourteam
-RELAY_CF_AUDIENCE=your-cf-access-audience-tag
+RELAY_CF_AUDIENCE=your-audience-tag
 
 RELAY_LOG_SINKS=stderr
 RELAY_STATIC_DIR=/opt/ssh-relay/static
 ```
 
+```bash
+chmod 640 /etc/ssh-relay/env
+chown root:ssh-relay /etc/ssh-relay/env
+```
+
+## Systemd service
+
 Write `/etc/systemd/system/ssh-relay.service`:
 
 ```ini
 [Unit]
-Description=SSH Web Relay
+Description=SSHamrock — browser-based SSH relay
 After=network-online.target
 Wants=network-online.target
 
@@ -90,8 +66,8 @@ Group=ssh-relay
 EnvironmentFile=/etc/ssh-relay/env
 WorkingDirectory=/opt/ssh-relay/src
 ExecStart=/opt/ssh-relay/.venv/bin/uvicorn ssh_relay.app:app \
-    --host 127.0.0.1 --port 8080 \
-    --proxy-headers --forwarded-allow-ips "127.0.0.1"
+    --host 0.0.0.0 --port 8080 \
+    --proxy-headers --forwarded-allow-ips "*"
 Restart=always
 RestartSec=2
 LimitNOFILE=65536
@@ -100,6 +76,9 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/log/ssh-relay
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
 
 [Install]
 WantedBy=multi-user.target
@@ -112,38 +91,21 @@ systemctl enable --now ssh-relay
 
 ## Update (subsequent deploys)
 
-The fastest path — rebuild, upload, restart:
-
 ```bash
-# On dev machine:
-tar czf /tmp/ssh-deploy.tar.gz --exclude='.git' --exclude='__pycache__' \
-    --exclude='.venv' -C /path/to/SSH-proxy .
-tar czf /tmp/ssh-webclient.tar.gz -C SSH-web-app/dist .
-scp /tmp/ssh-deploy.tar.gz /tmp/ssh-webclient.tar.gz $SERVER:/tmp/
-
-# On server:
-ssh $SERVER 'systemctl stop ssh-relay && \
-  rm -rf /opt/ssh-relay/src/* && tar xzf /tmp/ssh-deploy.tar.gz -C /opt/ssh-relay/src/ && \
-  rm -rf /opt/ssh-relay/static/* && tar xzf /tmp/ssh-webclient.tar.gz -C /opt/ssh-relay/static/ && \
-  chown -R ssh-relay:ssh-relay /opt/ssh-relay/ && \
-  /opt/ssh-relay/.venv/bin/pip install --no-cache-dir -e /opt/ssh-relay/src/ -q && \
-  systemctl start ssh-relay && \
-  rm /tmp/ssh-deploy.tar.gz /tmp/ssh-webclient.tar.gz && \
-  echo "Deployed. Status:" && systemctl status ssh-relay --no-pager | head -5'
+# Stop, update relay + web client, restart
+systemctl stop ssh-relay
+(cd /opt/ssh-relay/src && git pull)
+/opt/ssh-relay/.venv/bin/pip install --no-cache-dir -e /opt/ssh-relay/src/ -q
+rm -rf /opt/ssh-relay/static && cp -r dist/ /opt/ssh-relay/static/
+chown -R ssh-relay:ssh-relay /opt/ssh-relay/
+systemctl start ssh-relay
 ```
 
 ## Verify
 
 ```bash
-# Health check
-curl -s http://localhost:8080/healthz
-
-# Web client loads
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/
-
-# COOP/COEP headers set
-curl -sI http://localhost:8080/ | grep cross-origin
-
-# WASM binary accessible
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/plugin/wasm/ssh.wasm
+curl -s http://localhost:8080/healthz                                    # {"ok": true}
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/            # 200
+curl -sI http://localhost:8080/ | grep content-security-policy           # CSP present
+curl -sI http://localhost:8080/ | grep cross-origin                      # COOP/COEP present
 ```
