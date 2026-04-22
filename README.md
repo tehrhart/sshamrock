@@ -87,6 +87,47 @@ RELAY_TARGET_ALLOWLIST=10.0.0.0/8   # Comma-separated CIDRs
 
 Full configuration reference: [nassh-proxy docs](https://github.com/tehrhart/nassh-proxy).
 
+## Logging
+
+SSHamrock writes two log streams by default:
+
+| Log | Location | Format | Contents |
+|-----|----------|--------|----------|
+| **Audit log** | `/var/log/sshamrock/audit.jsonl` | JSON, one event per line | Handshakes, session start/close, identity, target host/port, duration, bytes transferred |
+| **Access log** | `journalctl -u ssh-relay` | Plain text (uvicorn) | HTTP requests, WebSocket connections, Python errors, startup messages |
+
+The audit log rotates automatically (100 MB per file, 10 backups = 1 GB total).
+
+**Example audit events:**
+
+```jsonl
+{"event": "handshake", "ts": "2026-04-22T...", "identity": {"email": "alice@example.com"}, "source_ip": "72.34.128.248"}
+{"event": "session.start", "ts": "2026-04-22T...", "identity": {"email": "alice@example.com"}, "target_host": "db.internal", "target_port": 22}
+{"event": "session.close", "ts": "2026-04-22T...", "duration_seconds": 847.3, "bytes_to_target": 15230, "bytes_from_target": 98412}
+```
+
+**Querying logs with jq:**
+
+```bash
+# Who connected today?
+jq -r 'select(.event=="session.start") | "\(.ts) \(.identity.email) → \(.target_host)"' \
+    /var/log/sshamrock/audit.jsonl
+
+# Sessions longer than 1 hour
+jq 'select(.event=="session.close" and .duration_seconds > 3600)' \
+    /var/log/sshamrock/audit.jsonl
+
+# Live tail
+tail -f /var/log/sshamrock/audit.jsonl | jq .
+```
+
+**Additional log sinks** (configure in `/etc/ssh-relay/env`):
+
+| Sink | Setting | Use case |
+|------|---------|----------|
+| Splunk HEC | `RELAY_LOG_SINKS=stderr,file,splunk` | Central SIEM |
+| Palo Alto User-ID | `RELAY_LOG_SINKS=stderr,file,pan` | Firewall user mapping |
+
 ## Security model
 
 **Network:** The relay transports opaque SSH ciphertext — it cannot read passwords, keys, or session content. Loopback, link-local, and cloud metadata IPs are blocked by default.
