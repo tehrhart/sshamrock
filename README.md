@@ -66,11 +66,57 @@ The quickstart installer prompts for Cloudflare or GCP IAP details. For other pr
 ## Features
 
 - **SSH and SFTP** in the browser — interactive terminal or command-line SFTP
-- **SSH key management** — import private keys, encrypted at rest with a passphrase (PBKDF2 + AES-256-GCM via Web Crypto API). Browser password manager can save the passphrase.
+- **SSH key management** — import private keys, encrypted at rest with a passphrase (PBKDF2 + AES-256-GCM via Web Crypto API). Browser password manager can save the passphrase. First available key is auto-selected.
 - **Saved connections** — profiles persist in localStorage
-- **URL shortcuts** — pre-populate with `?user=root&host=server.example.com`
+- **URL-driven connections** — pre-populate, autoconnect, and integrate with other tools (see below)
+- **Subdomain routing** — `host123.ssh.example.com` auto-connects to `host123`
 - **Session resumption** — relay buffers data during brief disconnects (v4 protocol)
 - **Single binary deployment** — one server, one port, one container
+
+## URL parameters
+
+SSHamrock connections can be fully controlled via URL parameters, making it easy to integrate with wikis, ticketing systems, CMDBs, or any tool that can produce a link.
+
+| Parameter | Example | Description |
+|-----------|---------|-------------|
+| `host` | `?host=db.internal` | Target hostname |
+| `user` | `?user=root` | Username (SSH prompts if omitted) |
+| `port` | `?port=2222` | Port (default: 22) |
+| `mode` | `?mode=sftp` | `ssh` or `sftp` |
+| `key` | `?key=id_ed25519` | Select a specific imported key |
+| `autoconnect` | `?autoconnect=1` | Skip the form, connect immediately |
+
+**Examples:**
+
+```
+# Pre-populate form
+https://ssh.example.com/?user=root&host=db.internal
+
+# One-click connect (prompts for key passphrase, then connects)
+https://ssh.example.com/?user=deploy&host=web01.prod&autoconnect=1
+
+# SFTP to a file server
+https://ssh.example.com/?host=files.internal&mode=sftp&autoconnect=1
+
+# No username — SSH will prompt
+https://ssh.example.com/?host=bastion.internal&autoconnect=1
+```
+
+### Subdomain routing
+
+When `BASE_DOMAIN` is configured in `config.js`, SSHamrock extracts the target hostname from the subdomain:
+
+```
+https://db-server.ssh.example.com  →  connects to "db-server"
+https://web01.ssh.example.com      →  connects to "web01"
+```
+
+With a Cloudflare wildcard DNS record (`*.ssh.example.com`) and a wildcard Access policy, users can reach any internal host by typing its name as a subdomain. Combine with `?autoconnect=1` for a zero-click experience after SSO.
+
+To enable, edit `src/js/config.js`:
+```javascript
+export const BASE_DOMAIN = 'ssh.example.com';
+```
 
 ## Configuration
 

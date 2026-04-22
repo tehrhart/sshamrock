@@ -15,7 +15,7 @@ import {getIndexeddbFileSystem} from '../nassh/js/nassh_fs.js';
 import {
   encryptAndStore, decryptKey, listStoredKeys, deleteStoredKey,
 } from './key-store.js';
-import {relayOptionsString} from './config.js';
+import {relayOptionsString, extractSubdomainHost} from './config.js';
 
 const storage = getSyncStorage();
 
@@ -55,16 +55,38 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
   populateProfiles(prefs, profileSelect);
   refreshKeyList();
 
-  // --- URL parameter pre-population ---
-  // Supports: ?user=root&host=server.example.com&port=22&mode=sftp
+  // --- Resolve connection parameters ---
+  // Priority: URL params > subdomain extraction > saved profile
   const params = new URLSearchParams(location.search);
+  const subdomainHost = extractSubdomainHost();
+
   if (params.get('user')) usernameInput.value = params.get('user');
   if (params.get('host')) hostnameInput.value = params.get('host');
+  else if (subdomainHost) hostnameInput.value = subdomainHost;
   if (params.get('port')) portInput.value = params.get('port');
   if (params.get('mode')) appSelect.value = params.get('mode');
+
+  // Auto-select key: explicit &key= param, or first available key.
+  const storedKeys = listStoredKeys();
+  if (params.get('key')) {
+    identitySelect.value = params.get('key');
+  } else if (storedKeys.length) {
+    identitySelect.value = storedKeys[0];
+  }
+
   // Strip params from address bar and history after reading.
   if (location.search) {
     history.replaceState({}, '', location.pathname + location.hash);
+  }
+
+  // Restore last-used profile only if nothing was pre-populated.
+  const hasPrePopulated = params.get('user') || params.get('host') || subdomainHost;
+  if (!hasPrePopulated) {
+    const lastId = localPrefs.getString('connectDialog/lastProfileId');
+    if (lastId) {
+      profileSelect.value = lastId;
+      profileSelect.dispatchEvent(new Event('change'));
+    }
   }
 
   // --- Profile selection ---
@@ -75,7 +97,7 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
       hostnameInput.value = '';
       portInput.value = '22';
       appSelect.value = 'ssh';
-      identitySelect.value = '';
+      identitySelect.value = storedKeys.length ? storedKeys[0] : '';
       return;
     }
     const p = prefs.getProfile(id);
@@ -84,7 +106,7 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     portInput.value = p.get('port') || 22;
     const app = p.get('app') || 'ssh';
     appSelect.value = (app === 'nasftp') ? 'sftp' : 'ssh';
-    identitySelect.value = p.get('identity') || '';
+    identitySelect.value = p.get('identity') || (storedKeys.length ? storedKeys[0] : '');
   });
 
   deleteBtn.addEventListener('click', () => {
@@ -98,17 +120,8 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     hostnameInput.value = '';
     portInput.value = '22';
     appSelect.value = 'ssh';
-    identitySelect.value = '';
+    identitySelect.value = storedKeys.length ? storedKeys[0] : '';
   });
-
-  // Restore last-used profile (only if URL params didn't pre-populate).
-  if (!params.get('user') && !params.get('host')) {
-    const lastId = localPrefs.getString('connectDialog/lastProfileId');
-    if (lastId) {
-      profileSelect.value = lastId;
-      profileSelect.dispatchEvent(new Event('change'));
-    }
-  }
 
   // --- Passphrase dialog (masked input, browser password manager) ---
   const passphraseDialog = document.getElementById('passphrase-dialog');
@@ -201,33 +214,28 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     if (current) identitySelect.value = current;
   }
 
-  // --- Form submission ---
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
+  // --- Connect logic (shared by form submit and autoconnect) ---
+  async function connect() {
     const username = usernameInput.value.trim();
     const hostname = hostnameInput.value.trim();
     const port = parseInt(portInput.value, 10) || 22;
     const app = appSelect.value;
     const identity = identitySelect.value;
 
-    if (!username || !hostname) {
-      alert('Username and hostname are required.');
-      return;
-    }
+    if (!hostname) return false;
 
     // If a key is selected, decrypt it and inject into the nassh filesystem.
     if (identity) {
       const passphrase = await askPassphrase(
           'Unlock SSH key',
           `Enter passphrase for "${identity}"`);
-      if (passphrase === null) return;
+      if (passphrase === null) return false;
       let keyData;
       try {
         keyData = await decryptKey(identity, passphrase);
       } catch {
         alert('Wrong passphrase or corrupted key.');
-        return;
+        return false;
       }
       const fs = await getIndexeddbFileSystem();
       await fs.createDirectory('/.ssh');
@@ -236,7 +244,7 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Save or update profile.
-    const desc = `${username}@${hostname}`;
+    const desc = username ? `${username}@${hostname}` : hostname;
     let profileId = profileSelect.value;
     let profile;
     if (profileId) {
@@ -262,7 +270,25 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     terminalEl.style.display = 'block';
 
     startTerminal(terminalEl, profileId, identity, storage, formWrapper);
+    return true;
+  }
+
+  // --- Form submission ---
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!hostnameInput.value.trim()) {
+      alert('Hostname is required.');
+      return;
+    }
+    await connect();
   });
+
+  // --- Autoconnect ---
+  // ?autoconnect=1 skips the form when hostname is known (from params or subdomain).
+  // Username is optional — SSH will prompt if not provided.
+  if (params.get('autoconnect') === '1' && hostnameInput.value.trim()) {
+    await connect();
+  }
 
   // If URL hash has a profile-id, connect directly.
   const hash = location.hash.slice(1);
