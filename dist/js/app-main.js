@@ -290,12 +290,17 @@ function startTerminal(terminalEl, profileId, identityName, storage, formWrapper
     watchBackgroundColor(terminal.getPrefs());
     loadWebFonts(terminal.getDocument());
 
+    let environment = terminal.getPrefs().get('environment');
+    if (typeof environment !== 'object' || environment === null) {
+      environment = {};
+    }
+
     const argstr = `profile-id:${profileId}`;
     const nasshCommand = new CommandInstance({
       io: terminal.io,
       syncStorage: storage,
       args: [argstr],
-      environment: {},
+      environment: environment,
       connectPage: '/',
       onExit: async (code) => {
         // Clean up decrypted key from the nassh filesystem.
