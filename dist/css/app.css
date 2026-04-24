@@ -201,11 +201,11 @@ input::placeholder {
   display: block;
   text-align: center;
   margin-top: 0.75rem;
-  font-size: 0.7rem;
-  color: #888;
+  font-size: 0.65rem;
+  color: #aaa;
   text-decoration: none;
 }
-.about-link:hover { color: #0066cc; }
+.about-link:hover { color: #888; }
 
 /* ---- Passphrase dialog ---- */
 
