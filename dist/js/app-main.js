@@ -79,16 +79,6 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     history.replaceState({}, '', location.pathname + location.hash);
   }
 
-  // Restore last-used profile only if nothing was pre-populated.
-  const hasPrePopulated = params.get('user') || params.get('host') || subdomainHost;
-  if (!hasPrePopulated) {
-    const lastId = localPrefs.getString('connectDialog/lastProfileId');
-    if (lastId) {
-      profileSelect.value = lastId;
-      profileSelect.dispatchEvent(new Event('change'));
-    }
-  }
-
   // --- Profile selection ---
   profileSelect.addEventListener('change', () => {
     const id = profileSelect.value;
@@ -122,6 +112,16 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     appSelect.value = 'ssh';
     identitySelect.value = storedKeys.length ? storedKeys[0] : '';
   });
+
+  // Restore last-used profile only if nothing was pre-populated.
+  const hasPrePopulated = params.get('user') || params.get('host') || subdomainHost;
+  if (!hasPrePopulated) {
+    const lastId = localPrefs.getString('connectDialog/lastProfileId');
+    if (lastId) {
+      profileSelect.value = lastId;
+      profileSelect.dispatchEvent(new Event('change'));
+    }
+  }
 
   // --- Passphrase dialog (masked input, browser password manager) ---
   const passphraseDialog = document.getElementById('passphrase-dialog');
