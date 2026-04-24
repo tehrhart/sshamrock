@@ -197,6 +197,16 @@ input::placeholder {
   background: #004488;
 }
 
+.about-link {
+  display: block;
+  text-align: center;
+  margin-top: 0.75rem;
+  font-size: 0.7rem;
+  color: #888;
+  text-decoration: none;
+}
+.about-link:hover { color: #0066cc; }
+
 /* ---- Passphrase dialog ---- */
 
 #passphrase-dialog {
