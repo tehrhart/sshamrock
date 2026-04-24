@@ -115,12 +115,17 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
 
   // Restore last-used profile only if nothing was pre-populated.
   const hasPrePopulated = params.get('user') || params.get('host') || subdomainHost;
-  if (!hasPrePopulated) {
-    const lastId = localPrefs.getString('connectDialog/lastProfileId');
-    if (lastId) {
-      profileSelect.value = lastId;
+  function syncFieldsToProfile() {
+    if (profileSelect.value && !hostnameInput.value) {
       profileSelect.dispatchEvent(new Event('change'));
     }
+  }
+  if (!hasPrePopulated) {
+    const lastId = localPrefs.getString('connectDialog/lastProfileId');
+    if (lastId) profileSelect.value = lastId;
+    syncFieldsToProfile();
+    // Browser autofill may restore the select after DOMContentLoaded.
+    requestAnimationFrame(syncFieldsToProfile);
   }
 
   // --- Passphrase dialog (masked input, browser password manager) ---
