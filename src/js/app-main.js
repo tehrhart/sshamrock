@@ -114,9 +114,13 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
   const hasPrePopulated = params.get('user') || params.get('host') || subdomainHost;
   if (!hasPrePopulated) {
     const lastId = localPrefs.getString('connectDialog/lastProfileId');
-    if (lastId) {
-      profileSelect.value = lastId;
-      applyProfile(lastId);
+    const profileIds = prefs.get('profile-ids') || [];
+    const restoreId = (lastId && profileIds.includes(lastId))
+        ? lastId
+        : profileIds[0] || '';
+    if (restoreId) {
+      profileSelect.value = restoreId;
+      applyProfile(restoreId);
     }
   }
 
