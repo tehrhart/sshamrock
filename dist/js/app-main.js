@@ -79,9 +79,7 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     history.replaceState({}, '', location.pathname + location.hash);
   }
 
-  // --- Profile selection ---
-  profileSelect.addEventListener('change', () => {
-    const id = profileSelect.value;
+  function applyProfile(id) {
     if (!id) {
       usernameInput.value = '';
       hostnameInput.value = '';
@@ -97,7 +95,10 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     const app = p.get('app') || 'ssh';
     appSelect.value = (app === 'nasftp') ? 'sftp' : 'ssh';
     identitySelect.value = p.get('identity') || (storedKeys.length ? storedKeys[0] : '');
-  });
+  }
+
+  // --- Profile selection ---
+  profileSelect.addEventListener('change', () => applyProfile(profileSelect.value));
 
   deleteBtn.addEventListener('click', () => {
     const id = profileSelect.value;
@@ -106,26 +107,17 @@ globalThis.addEventListener('DOMContentLoaded', async () => {
     if (!confirm(`Delete profile "${desc}"?`)) return;
     prefs.removeProfile(id);
     populateProfiles(prefs, profileSelect);
-    usernameInput.value = '';
-    hostnameInput.value = '';
-    portInput.value = '22';
-    appSelect.value = 'ssh';
-    identitySelect.value = storedKeys.length ? storedKeys[0] : '';
+    applyProfile('');
   });
 
   // Restore last-used profile only if nothing was pre-populated.
   const hasPrePopulated = params.get('user') || params.get('host') || subdomainHost;
-  function syncFieldsToProfile() {
-    if (profileSelect.value && !hostnameInput.value) {
-      profileSelect.dispatchEvent(new Event('change'));
-    }
-  }
   if (!hasPrePopulated) {
     const lastId = localPrefs.getString('connectDialog/lastProfileId');
-    if (lastId) profileSelect.value = lastId;
-    syncFieldsToProfile();
-    // Browser autofill may restore the select after DOMContentLoaded.
-    requestAnimationFrame(syncFieldsToProfile);
+    if (lastId) {
+      profileSelect.value = lastId;
+      applyProfile(lastId);
+    }
   }
 
   // --- Passphrase dialog (masked input, browser password manager) ---
